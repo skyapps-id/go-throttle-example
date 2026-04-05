@@ -1,0 +1,14 @@
+version: "3.8"
+
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - REDIS_ADDR=host.docker.internal:6379
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    mem_limit: 64m
