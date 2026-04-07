@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 )
 
 var (
@@ -32,8 +33,8 @@ var (
 )
 
 func InitMetrics(registry *prometheus.Registry) {
-	registry.MustRegister(prometheus.NewGoCollector())
-	registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
+	registry.MustRegister(collectors.NewGoCollector())
+	registry.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 	registry.MustRegister(ThrottleRequestsTotal)
 	registry.MustRegister(ThrottleQueueLength)
 	registry.MustRegister(ThrottleRequestDuration)
