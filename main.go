@@ -11,6 +11,8 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	"github.com/labstack/echo/v4"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
@@ -23,7 +25,12 @@ func main() {
 		Addr: addr,
 	})
 
+	registry := prometheus.NewRegistry()
+	middleware.InitMetrics(registry)
+
 	e := echo.New()
+
+	e.GET("/metrics", echo.WrapHandler(promhttp.HandlerFor(registry, promhttp.HandlerOpts{})))
 
 	throttleInMem := middleware.InMemoryThrottle(middleware.InMemoryThrottleConfig{
 		RateLimit:     10,
@@ -40,7 +47,7 @@ func main() {
 	})
 
 	e.GET("/no-throttle", func(c echo.Context) error {
-		data := make([]byte, 10*1024*1024)
+		data := make([]byte, 1*1024*1024)
 		time.Sleep(100 * time.Millisecond)
 		_ = data[0]
 		return c.JSON(200, map[string]string{
@@ -49,7 +56,7 @@ func main() {
 	})
 
 	e.GET("/throttle", func(c echo.Context) error {
-		data := make([]byte, 10*1024*1024)
+		data := make([]byte, 1*1024*1024)
 		time.Sleep(100 * time.Millisecond)
 		_ = data[0]
 		return c.JSON(200, map[string]string{
@@ -58,7 +65,7 @@ func main() {
 	}, throttleInMem)
 
 	e.GET("/throttle-with-redis", func(c echo.Context) error {
-		data := make([]byte, 10*1024*1024)
+		data := make([]byte, 1*1024*1024)
 		time.Sleep(100 * time.Millisecond)
 		_ = data[0]
 		return c.JSON(200, map[string]string{
@@ -66,5 +73,5 @@ func main() {
 		})
 	}, throttleRedis)
 
-	log.Fatal(e.Start(fmt.Sprintf(":%d", 8080)))
+	log.Fatal(e.Start(fmt.Sprintf(":%d", 8000)))
 }

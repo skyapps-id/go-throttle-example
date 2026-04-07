@@ -1,4 +1,5 @@
 import http from 'k6/http';
+import { sleep } from 'k6';
 import { Trend, Counter } from 'k6/metrics';
 
 const BASE_URL = __ENV.URL || 'http://localhost:8080/no-throttle';
@@ -12,9 +13,9 @@ export const options = {
   scenarios: {
     burst: {
       executor: 'shared-iterations',
-      vus: 40,
-      iterations: 40,
-      maxDuration: '30s',
+      vus: 50,
+      iterations: 1000,
+      maxDuration: '10m',
     },
   },
 };
@@ -77,4 +78,6 @@ export default function () {
   } else {
     console.log(`[---] ${res.status} - ${res.body}`);
   }
+
+  sleep(Math.random() * 2 + 0.5);
 }

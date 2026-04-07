@@ -1,12 +1,11 @@
-version: "3.8"
-
 services:
   app:
     build: .
+    container_name: go-throttle
     ports:
-      - "8080:8080"
+      - "8000:8000"
     environment:
-      - REDIS_ADDR=host.docker.internal:6379
+      - REDIS_ADDR=redis:6379
     deploy:
       resources:
         limits:

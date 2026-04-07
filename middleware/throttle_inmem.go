@@ -37,6 +37,8 @@ func InMemoryThrottle(config InMemoryThrottleConfig) echo.MiddlewareFunc {
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
+			start := time.Now()
+
 			mu.Lock()
 			now := time.Now().UnixMilli()
 			cleanup(now)
@@ -44,11 +46,14 @@ func InMemoryThrottle(config InMemoryThrottleConfig) echo.MiddlewareFunc {
 			if len(times) < config.RateLimit {
 				times = append(times, now)
 				mu.Unlock()
+				ThrottleRequestsTotal.WithLabelValues("inmem", c.Request().Method, c.Path(), "allowed").Inc()
+				ThrottleRequestDuration.WithLabelValues("inmem", c.Request().Method, c.Path(), "allowed").Observe(time.Since(start).Seconds())
 				return next(c)
 			}
 
 			if len(queue) >= config.MaxQueue {
 				mu.Unlock()
+				ThrottleRequestsTotal.WithLabelValues("inmem", c.Request().Method, c.Path(), "rejected").Inc()
 				return c.JSON(http.StatusServiceUnavailable, map[string]string{
 					"error": "server busy",
 				})
@@ -56,6 +61,8 @@ func InMemoryThrottle(config InMemoryThrottleConfig) echo.MiddlewareFunc {
 
 			ch := make(chan struct{})
 			queue = append(queue, ch)
+			ThrottleRequestsTotal.WithLabelValues("inmem", c.Request().Method, c.Path(), "queued").Inc()
+			ThrottleQueueLength.WithLabelValues("inmem", c.Request().Method, c.Path()).Set(float64(len(queue)))
 			mu.Unlock()
 
 			ticker := time.NewTicker(100 * time.Millisecond)
@@ -71,7 +78,9 @@ func InMemoryThrottle(config InMemoryThrottleConfig) echo.MiddlewareFunc {
 							break
 						}
 					}
+					ThrottleQueueLength.WithLabelValues("inmem", c.Request().Method, c.Path()).Set(float64(len(queue)))
 					mu.Unlock()
+					ThrottleRequestsTotal.WithLabelValues("inmem", c.Request().Method, c.Path(), "timeout").Inc()
 					return c.JSON(http.StatusRequestTimeout, map[string]string{
 						"error": "request timeout",
 					})
@@ -86,7 +95,9 @@ func InMemoryThrottle(config InMemoryThrottleConfig) echo.MiddlewareFunc {
 								break
 							}
 						}
+						ThrottleQueueLength.WithLabelValues("inmem", c.Request().Method, c.Path()).Set(float64(len(queue)))
 						mu.Unlock()
+						ThrottleRequestDuration.WithLabelValues("inmem", c.Request().Method, c.Path(), "queued").Observe(time.Since(start).Seconds())
 						return next(c)
 					}
 					mu.Unlock()

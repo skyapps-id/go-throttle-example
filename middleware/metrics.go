@@ -1,0 +1,40 @@
+package middleware
+
+import (
+	"github.com/prometheus/client_golang/prometheus"
+)
+
+var (
+	ThrottleRequestsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "throttle_requests_total",
+			Help: "Total number of throttle requests.",
+		},
+		[]string{"type", "method", "endpoint", "result"},
+	)
+
+	ThrottleQueueLength = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "throttle_queue_length",
+			Help: "Current number of requests in throttle queue.",
+		},
+		[]string{"type", "method", "endpoint"},
+	)
+
+	ThrottleRequestDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "throttle_request_duration_seconds",
+			Help:    "Duration of throttle requests (only allowed and queued).",
+			Buckets: []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
+		},
+		[]string{"type", "method", "endpoint", "result"},
+	)
+)
+
+func InitMetrics(registry *prometheus.Registry) {
+	registry.MustRegister(prometheus.NewGoCollector())
+	registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
+	registry.MustRegister(ThrottleRequestsTotal)
+	registry.MustRegister(ThrottleQueueLength)
+	registry.MustRegister(ThrottleRequestDuration)
+}
