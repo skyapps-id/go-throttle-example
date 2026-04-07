@@ -30,6 +30,8 @@ func main() {
 
 	e := echo.New()
 
+	e.Use(middleware.HTTPMetrics())
+
 	e.GET("/metrics", echo.WrapHandler(promhttp.HandlerFor(registry, promhttp.HandlerOpts{})))
 
 	throttleInMem := middleware.InMemoryThrottle(middleware.InMemoryThrottleConfig{
