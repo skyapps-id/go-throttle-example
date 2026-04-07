@@ -48,6 +48,7 @@ func InMemoryThrottle(config InMemoryThrottleConfig) echo.MiddlewareFunc {
 				mu.Unlock()
 				ThrottleRequestsTotal.WithLabelValues("inmem", c.Request().Method, c.Path(), "allowed").Inc()
 				ThrottleRequestDuration.WithLabelValues("inmem", c.Request().Method, c.Path(), "allowed").Observe(time.Since(start).Seconds())
+				ThrottleWindowUsage.WithLabelValues("inmem", c.Request().Method, c.Path()).Set(float64(len(times)) / float64(config.RateLimit))
 				return next(c)
 			}
 
@@ -63,7 +64,10 @@ func InMemoryThrottle(config InMemoryThrottleConfig) echo.MiddlewareFunc {
 			queue = append(queue, ch)
 			ThrottleRequestsTotal.WithLabelValues("inmem", c.Request().Method, c.Path(), "queued").Inc()
 			ThrottleQueueLength.WithLabelValues("inmem", c.Request().Method, c.Path()).Set(float64(len(queue)))
+			ThrottleWindowUsage.WithLabelValues("inmem", c.Request().Method, c.Path()).Set(float64(len(times)+len(queue)) / float64(config.RateLimit))
 			mu.Unlock()
+
+			queueStart := time.Now()
 
 			ticker := time.NewTicker(100 * time.Millisecond)
 			defer ticker.Stop()
@@ -96,7 +100,9 @@ func InMemoryThrottle(config InMemoryThrottleConfig) echo.MiddlewareFunc {
 							}
 						}
 						ThrottleQueueLength.WithLabelValues("inmem", c.Request().Method, c.Path()).Set(float64(len(queue)))
+						ThrottleWindowUsage.WithLabelValues("inmem", c.Request().Method, c.Path()).Set(float64(len(times)+len(queue)) / float64(config.RateLimit))
 						mu.Unlock()
+						ThrottleWaitTime.WithLabelValues("inmem", c.Request().Method, c.Path()).Observe(time.Since(queueStart).Seconds())
 						ThrottleRequestDuration.WithLabelValues("inmem", c.Request().Method, c.Path(), "queued").Observe(time.Since(start).Seconds())
 						return next(c)
 					}

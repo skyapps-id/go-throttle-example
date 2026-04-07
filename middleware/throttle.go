@@ -89,6 +89,7 @@ func Throttle(config ThrottleConfig) echo.MiddlewareFunc {
 			).Result()
 
 			if err != nil {
+				ThrottleRedisErrors.WithLabelValues("eval_allow").Inc()
 				return c.JSON(http.StatusInternalServerError, map[string]string{
 					"error": "internal server error",
 				})
@@ -100,6 +101,7 @@ func Throttle(config ThrottleConfig) echo.MiddlewareFunc {
 			case 0:
 				ThrottleRequestsTotal.WithLabelValues("redis", c.Request().Method, c.Path(), "allowed").Inc()
 				ThrottleRequestDuration.WithLabelValues("redis", c.Request().Method, c.Path(), "allowed").Observe(time.Since(start).Seconds())
+				ThrottleWindowUsage.WithLabelValues("redis", c.Request().Method, c.Path()).Set(1.0 / float64(config.RateLimit))
 				return next(c)
 			case 2:
 				ThrottleRequestsTotal.WithLabelValues("redis", c.Request().Method, c.Path(), "rejected").Inc()
@@ -112,6 +114,10 @@ func Throttle(config ThrottleConfig) echo.MiddlewareFunc {
 
 			queueLen, _ := config.RedisClient.LLen(ctx, queueKey).Result()
 			ThrottleQueueLength.WithLabelValues("redis", c.Request().Method, c.Path()).Set(float64(queueLen))
+
+			ThrottleWindowUsage.WithLabelValues("redis", c.Request().Method, c.Path()).Set(float64(config.RateLimit+int(queueLen)) / float64(config.RateLimit))
+
+			queueStart := time.Now()
 
 			ticker := time.NewTicker(100 * time.Millisecond)
 			defer ticker.Stop()
@@ -133,12 +139,17 @@ func Throttle(config ThrottleConfig) echo.MiddlewareFunc {
 					got, err := config.RedisClient.EvalSha(ctx, dequeueSha, []string{key, queueKey},
 						member, time.Now().UnixMilli(), newMember, config.RateLimit, ttl,
 					).Result()
+					if err != nil {
+						ThrottleRedisErrors.WithLabelValues("eval_dequeue").Inc()
+					}
 					if err == nil {
 						if v, _ := got.(int64); v == 1 {
+							ThrottleWaitTime.WithLabelValues("redis", c.Request().Method, c.Path()).Observe(time.Since(queueStart).Seconds())
 							ThrottleRequestDuration.WithLabelValues("redis", c.Request().Method, c.Path(), "queued").Observe(time.Since(start).Seconds())
 
 							queueLen, _ := config.RedisClient.LLen(ctx, queueKey).Result()
 							ThrottleQueueLength.WithLabelValues("redis", c.Request().Method, c.Path()).Set(float64(queueLen))
+							ThrottleWindowUsage.WithLabelValues("redis", c.Request().Method, c.Path()).Set(float64(config.RateLimit+int(queueLen)) / float64(config.RateLimit))
 
 							return next(c)
 						}
