@@ -1,6 +1,6 @@
 # Middleware
 
-Package middleware menyediakan throttle middleware untuk Echo framework dengan dua implementasi: Redis (global limit) dan In-Memory (per-instance limit).
+Package middleware provides throttle middleware for Echo framework with two implementations: Redis (global limit) and In-Memory (per-instance limit).
 
 ## Flow
 
@@ -51,30 +51,30 @@ Request Masuk
 
 ## Redis Throttle (`Throttle`)
 
-Global limit menggunakan Redis Lua script (atomic operation).
+Global limit using Redis Lua script (atomic operation).
 
-### Komponen Redis
+### Redis Components
 
-| Data Structure | Key | Fungsi |
+| Data Structure | Key | Function |
 |---|---|---|
 | Sorted Set | `throttle:global` | Sliding window, score = timestamp (ms), member = unique ID |
-| List | `throttle:global:queue` | Antrian request yang menunggu slot |
+| List | `throttle:global:queue` | Queue of requests waiting for slot |
 
 ### Lua Script
 
-**allowScript** — Dieksekusi saat request masuk:
+**allowScript** — Executed when request arrives:
 
-1. `ZREMRANGEBYSCORE` — Hapus entry yang sudah expired (di luar window)
-2. `ZCARD` — Hitung request aktif dalam window
-3. Jika `< rate_limit` → `ZADD` + return `0` (lanjutkan)
-4. Jika queue penuh → return `2` (reject)
-5. Jika tidak → `RPUSH` ke queue + return `1` (tunggu)
+1. `ZREMRANGEBYSCORE` — Remove expired entries (outside window)
+2. `ZCARD` — Count active requests in window
+3. If `< rate_limit` → `ZADD` + return `0` (proceed)
+4. If queue full → return `2` (reject)
+5. Else → `RPUSH` to queue + return `1` (wait)
 
-**dequeueScript** — Dieksekusi setiap 100ms oleh request di queue:
+**dequeueScript** — Executed every 100ms by queued requests:
 
-1. `ZCARD` — Cek apakah ada slot kosong
-2. Jika ada → `LREM` keluar dari queue + `ZADD` + return `1` (lanjutkan)
-3. Jika belum → return `0` (tetap tunggu)
+1. `ZCARD` — Check if slot available
+2. If yes → `LREM` from queue + `ZADD` + return `1` (proceed)
+3. If not → return `0` (keep waiting)
 
 ### Config
 
@@ -90,24 +90,24 @@ middleware.Throttle(middleware.ThrottleConfig{
 
 ### Response
 
-| Kode | Kondisi |
+| Code | Condition |
 |---|---|
-| 200 | Request diproses |
-| 503 | Queue penuh (`{"error": "server busy"}`) |
-| 408 | Timeout saat menunggu queue (`{"error": "request timeout"}`) |
+| 200 | Request processed |
+| 503 | Queue full (`{"error": "server busy"}`) |
+| 408 | Timeout while waiting in queue (`{"error": "request timeout"}`) |
 | 500 | Redis error |
 
 ## In-Memory Throttle (`InMemoryThrottle`)
 
-Per-instance limit menggunakan `sync.Mutex` + slice.
+Per-instance limit using `sync.Mutex` + slice.
 
-### Komponen
+### Components
 
-| Variable | Tipe | Fungsi |
+| Variable | Type | Function |
 |---|---|---|
-| `mu` | `sync.Mutex` | Lock untuk race condition |
+| `mu` | `sync.Mutex` | Lock for race condition |
 | `times` | `[]int64` | Sliding window (timestamp ms) |
-| `queue` | `[]chan struct{}` | Antrian request yang menunggu |
+| `queue` | `[]chan struct{}` | Queue of waiting requests |
 
 ### Config
 
@@ -119,12 +119,12 @@ middleware.InMemoryThrottle(middleware.InMemoryThrottleConfig{
 })
 ```
 
-## Perbandingan
+## Comparison
 
 | | Redis | In-Memory |
 |---|---|---|
 | Scope | Global (multi-instance) | Per-instance |
-| Eksternal Dependency | Redis | Tidak ada |
-| Latency | +network ke Redis | Lebih cepat |
+| External Dependency | Redis | None |
+| Latency | +network to Redis | Faster |
 | Use Case | API Key limit, IP limit | Server protection |
-| Data Persistence | Ya | Hilang saat restart |
+| Data Persistence | Yes | Lost on restart |

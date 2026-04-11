@@ -26,6 +26,15 @@
 |--------|------|--------|-------------|
 | `throttle_redis_errors_total` | Counter | `operation` | Total Redis errors in throttle middleware. `operation`: `eval_allow`, `eval_dequeue`. |
 
+## Database
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `db_pool_stats` | Gauge | `stat` | Database connection pool statistics. `stat`: `max_open_connections`, `open_connections`, `in_use`, `idle`, `wait_count`, `wait_duration_seconds`, `max_idle_closed`, `max_lifetime_closed`. |
+| `db_query_duration_seconds` | Histogram | `operation`, `status` | Duration of database queries. Buckets: `0.001s` - `10s`. `status`: `success`, `error`. |
+| `db_queries_total` | Counter | `operation`, `status` | Total number of database queries. `status`: `success`, `error`. |
+| `db_query_errors_total` | Counter | `operation`, `error_type` | Total number of database query errors. |
+
 ## Runtime
 
 | Metric | Type | Labels | Description |
@@ -59,4 +68,13 @@ throttle_window_usage_ratio
 
 # Redis error rate
 rate(throttle_redis_errors_total[5m])
+
+# Database query duration P95
+histogram_quantile(0.95, rate(db_query_duration_seconds_bucket[5m]))
+
+# Database pool usage
+db_pool_stats{stat="in_use"} / db_pool_stats{stat="max_open_connections"}
+
+# Database error rate
+rate(db_query_errors_total[5m]) / rate(db_queries_total[5m])
 ```

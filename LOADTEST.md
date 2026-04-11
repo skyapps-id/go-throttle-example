@@ -1,6 +1,6 @@
 # Go-Throttle Load Test Summary
 
-## Konfigurasi
+## Configuration
 
 | Setting | Value |
 |---|---|
@@ -12,15 +12,15 @@
 | VUs | 40 |
 | Response Delay | 500ms |
 
-## Endpoint
+## Endpoints
 
 | Endpoint | Description |
 |---|---|
-| `/no-throttle` | Tanpa throttle |
+| `/no-throttle` | Without throttle |
 | `/throttle` | In-memory throttle |
 | `/redis` | Redis throttle (global) |
 
-## Hasil
+## Results
 
 ### `/throttle`
 
@@ -28,7 +28,7 @@
 Total requests:  40
 200 OK:          30 (75%)
 503 Server Busy: 10 (25%)
-OOM Crash:       Tidak
+OOM Crash:       No
 ```
 
 | Response Time | Value |
@@ -46,7 +46,7 @@ OOM Crash:       Tidak
 Total requests:  40
 200 OK:          6 (15%)
 503 Server Busy: 0
-OOM Crash:       Ya (34 request hilang)
+OOM Crash:       Yes (34 requests lost)
 ```
 
 | Response Time | Value |
@@ -63,18 +63,18 @@ OOM Crash:       Ya (34 request hilang)
 | Metric | `/throttle` | `/no-throttle` |
 |---|---|---|
 | Success Rate | 75% | 15% |
-| OOM | Tidak | Ya |
+| OOM | No | Yes |
 | Avg Response Time | 5200ms | 143ms |
 | Max Response Time | 10277ms | 170ms |
 
-## Kesimpulan
+## Conclusion
 
-- **Tanpa throttle**: Container OOM, hanya 6 request berhasil. 34 request hilang (silent failure), client tidak mendapat response apapun.
-- **Pakai throttle**: Semua request mendapat response. 30 berhasil + 10 ditolak dengan `503 Server Busy`. Server tetap hidup dan stabil.
+- **Without throttle**: Container OOM, only 6 requests succeeded. 34 requests lost (silent failure), clients receive no response.
+- **With throttle**: All requests receive response. 30 succeeded + 10 rejected with `503 Server Busy`. Server remains alive and stable.
 
-**Trade-off**: Throttle memiliki response time lebih tinggi karena antrian, namun menjamin server tidak crash akibat kelebihan beban memori.
+**Trade-off**: Throttle has higher response time due to queuing, but guarantees server won't crash due to memory overload.
 
-## Cara Menjalankan
+## How to Run
 
 ```bash
 # Build & run

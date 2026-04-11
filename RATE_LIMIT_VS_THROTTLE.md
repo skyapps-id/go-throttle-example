@@ -2,7 +2,7 @@
 
 ## Rate Limit
 
-Batasi jumlah request dalam periode tertentu. Request yang kelebihan **langsung ditolak**.
+Limit the number of requests within a certain period. Excess requests are **immediately rejected**.
 
 ```
 Request 1-10  → 200 OK
@@ -10,35 +10,35 @@ Request 11    → 429 Too Many Requests
 Request 12    → 429 Too Many Requests
 ```
 
-**Tujuan:** Mencegah abuse (brute force, DDoS, over-usage API).
+**Purpose:** Prevent abuse (brute force, DDoS, API over-usage).
 
 ## Throttle
 
-Batasi jumlah request yang **diproses bersamaan**. Request yang kelebihan **ditangguhkan (queue)**, bukan ditolak. Ditolak hanya kalau queue penuh.
+Limit the number of requests **processed simultaneously**. Excess requests are **queued (delayed)**, not rejected. Rejection only occurs when the queue is full.
 
 ```
-Request 1-10  → diproses
-Request 11    → masuk antrian, tunggu slot kosong
-Request 12    → masuk antrian, tunggu slot kosong
+Request 1-10  → processed
+Request 11    → enters queue, waits for available slot
+Request 12    → enters queue, waits for available slot
 ...
-Request 61    → queue penuh → 503 Server Busy
+Request 61    → queue full → 503 Server Busy
 ```
 
-**Tujuan:** Melindungi resource server (memori, CPU, koneksi database).
+**Purpose:** Protect server resources (memory, CPU, database connections).
 
-## Perbandingan
+## Comparison
 
 | | Rate Limit | Throttle |
 |---|---|---|
-| Kelebihan request | Langsung ditolak | Di-queue dulu |
-| Goal | Perlindungan abuse | Kontrol concurrency |
-| Response | 429 Too Many Requests | 503 Server Busy (queue penuh) |
-| Response | 408 Timeout (tidak ada) | 408 Timeout (timeout antrian) |
-| Contoh | API Key limit (GitHub API) | Server resource protection |
-| Timeout | Tidak ada | Ya, request bisa timeout saat menunggu |
-| Antrian | Tidak ada | Ya, request ditahan sampai ada slot |
+| Excess requests | Immediately rejected | Queued first |
+| Goal | Abuse protection | Concurrency control |
+| Response | 429 Too Many Requests | 503 Server Busy (queue full) |
+| Response | 408 Timeout (none) | 408 Timeout (queue timeout) |
+| Example | API Key limit (GitHub API) | Server resource protection |
+| Timeout | None | Yes, requests can timeout while waiting |
+| Queue | None | Yes, requests held until slot available |
 
-## Contoh Kasus
+## Use Cases
 
 ### Rate Limit
 
@@ -52,34 +52,34 @@ curl https://api.github.com/user   # 429 Too Many Requests
 ### Throttle
 
 ```bash
-# Server hanya sanggup proses 10 request bersamaan
-curl http://localhost:8080/api  # request 1-10 → diproses
-curl http://localhost:8080/api  # request 11-30 → masuk antrian, response time lebih lambat
+# Server can only process 10 requests simultaneously
+curl http://localhost:8080/api  # request 1-10 → processed
+curl http://localhost:8080/api  # request 11-30 → enters queue, slower response time
 curl http://localhost:8080/api  # request 31+ → 503 Server Busy
 ```
 
-## Kapan Pakai Apa
+## When to Use What
 
-| Kebutuhan | Solusi |
+| Requirement | Solution |
 |---|---|
-| Batasi usage per API Key | Rate Limit |
-| Batasi request per IP | Rate Limit |
-| Lindungi server dari OOM/CPU overload | Throttle |
-| Lindungi database connection pool | Throttle |
-| SaaS billing (x request per bulan) | Rate Limit |
+| Limit usage per API Key | Rate Limit |
+| Limit requests per IP | Rate Limit |
+| Protect server from OOM/CPU overload | Throttle |
+| Protect database connection pool | Throttle |
+| SaaS billing (x requests per month) | Rate Limit |
 | Background job processing | Throttle |
 
-## Gabungan
+## Combination
 
-Dalam produksi, keduanya bisa digabung:
+In production, both can be combined:
 
 ```
-Request Masuk
+Incoming Request
      │
      ▼
 ┌──────────────┐
 │ Rate Limit   │ → 429 (API Key limit)
-│ 100 req/hari │
+│ 100 req/day  │
 └──────┬───────┘
        ▼
 ┌──────────────┐
@@ -92,4 +92,4 @@ Request Masuk
 └──────────────┘
 ```
 
-Rate limit di luar (gateway/load balancer) untuk billing & abuse protection, throttle di dalam (middleware) untuk resource protection.
+Rate limit at the edge (gateway/load balancer) for billing & abuse protection, throttle internally (middleware) for resource protection.

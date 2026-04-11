@@ -34,7 +34,7 @@
 
 ## 1. Executive Summary
 
-Go-Throttle menyediakan layanan rate limiting dengan dua strategi: **in-memory** dan **Redis-based**. Layanan ini dirancang untuk melindungi downstream services dari traffic spike, mencegah OOM, dan menjamin fair resource allocation.
+Go-Throttle provides rate limiting services with two strategies: **in-memory** and **Redis-based**. This service is designed to protect downstream services from traffic spikes, prevent OOM, and guarantee fair resource allocation.
 
 ### Key SLO Commitments
 
@@ -48,12 +48,12 @@ Go-Throttle menyediakan layanan rate limiting dengan dua strategi: **in-memory**
 
 ### Business Impact
 
-Berdasarkan load test yang dilakukan (lihat `LOADTEST.md`):
+Based on load tests conducted (see `LOADTEST.md`):
 
 | Scenario | Success Rate | OOM | Server Crash |
 |----------|-------------|-----|-------------|
-| Tanpa Throttle | 15% | Ya | Ya |
-| Dengan Throttle | 75% + 25% graceful rejection | Tidak | Tidak |
+| Without Throttle | 15% | Yes | Yes |
+| With Throttle | 75% + 25% graceful rejection | No | No |
 
 ---
 
@@ -63,13 +63,13 @@ Berdasarkan load test yang dilakukan (lihat `LOADTEST.md`):
 
 | Term | Definition |
 |------|-----------|
-| **SLI** (Service Level Indicator) | Metric kuantitatif yang mengukur performa layanan |
-| **SLO** (Service Level Objective) | Target nilai SLI yang harus dicapai |
-| **SLA** (Service Level Agreement) | Komitmen formal terhadap SLO, termasuk konsekuensi jika tidak terpenuhi |
-| **Error Budget** | Persentase toleransi error di luar SLO target |
-| **Burn Rate** | Kecepatan konsumsi error budget per unit waktu |
-| **MTTD** (Mean Time to Detect) | Rata-rata waktu dari terjadinya insiden hingga terdeteksi sistem |
-| **MTTR** (Mean Time to Resolve) | Rata-rata waktu dari deteksi hingga insiden terselesaikan |
+| **SLI** (Service Level Indicator) | Quantitative metric that measures service performance |
+| **SLO** (Service Level Objective) | Target SLI value that must be achieved |
+| **SLA** (Service Level Agreement) | Formal commitment to SLO, including consequences if not met |
+| **Error Budget** | Percentage of error tolerance outside the SLO target |
+| **Burn Rate** | Rate of error budget consumption per unit time |
+| **MTTD** (Mean Time to Detect) | Average time from incident occurrence to system detection |
+| **MTTR** (Mean Time to Resolve) | Average time from detection to incident resolution |
 
 ### 2.2 Scope
 
@@ -944,6 +944,15 @@ process_open_fds
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
 | `throttle_redis_errors_total` | Counter | `operation` | Total Redis errors. `operation`: `eval_allow`, `eval_dequeue`. |
+
+### Database
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `db_pool_stats` | Gauge | `stat` | Database connection pool statistics. `stat`: `max_open_connections`, `open_connections`, `in_use`, `idle`, `wait_count`, `wait_duration_seconds`, `max_idle_closed`, `max_lifetime_closed`. |
+| `db_query_duration_seconds` | Histogram | `operation`, `status` | Duration of database queries. Buckets: `0.001s` - `10s`. |
+| `db_queries_total` | Counter | `operation`, `status` | Total number of database queries. |
+| `db_query_errors_total` | Counter | `operation`, `error_type` | Total number of database query errors. |
 
 ### Runtime
 
