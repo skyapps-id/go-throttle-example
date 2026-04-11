@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"time"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	"github.com/labstack/echo/v4"
+	_ "github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -21,12 +23,32 @@ func main() {
 		addr = "localhost:6379"
 	}
 
+	pgDSN := os.Getenv("POSTGRES_DSN")
+	if pgDSN == "" {
+		pgDSN = "host=localhost user=root password=root dbname=rust-database port=5432 sslmode=disable"
+	}
+
+	sqlDB, err := sql.Open("postgres", pgDSN)
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	if err := sqlDB.Ping(); err != nil {
+		log.Fatalf("Failed to ping database: %v", err)
+	}
+
+	sqlDB.SetMaxOpenConns(25)
+	sqlDB.SetMaxIdleConns(5)
+	sqlDB.SetConnMaxLifetime(5 * time.Minute)
+
 	rdb := redis.NewClient(&redis.Options{
 		Addr: addr,
 	})
 
 	registry := prometheus.NewRegistry()
 	middleware.InitMetrics(registry)
+
+	middleware.StartDBPoolMetricsCollector(sqlDB, 10*time.Second)
 
 	e := echo.New()
 
@@ -74,6 +96,24 @@ func main() {
 			"message": "hello from redis throttle",
 		})
 	}, throttleRedis)
+
+	e.GET("/db-test", func(c echo.Context) error {
+		start := time.Now()
+		var version string
+		err := sqlDB.QueryRow("SELECT version()").Scan(&version)
+		middleware.TrackQuery("select_version", start, err)
+
+		if err != nil {
+			return c.JSON(500, map[string]string{
+				"error": "Database query failed",
+			})
+		}
+
+		return c.JSON(200, map[string]interface{}{
+			"message": "Database connection successful",
+			"version": version,
+		})
+	})
 
 	log.Fatal(e.Start(fmt.Sprintf(":%d", 8000)))
 }

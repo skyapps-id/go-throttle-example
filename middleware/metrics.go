@@ -1,6 +1,9 @@
 package middleware
 
 import (
+	"database/sql"
+	"time"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 )
@@ -97,6 +100,39 @@ var (
 		},
 		[]string{"operation"},
 	)
+
+	DBPoolStats = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "db_pool_stats",
+			Help: "Database connection pool statistics.",
+		},
+		[]string{"stat"},
+	)
+
+	DBQueryDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "db_query_duration_seconds",
+			Help:    "Duration of database queries.",
+			Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
+		},
+		[]string{"operation", "status"},
+	)
+
+	DBQueriesTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "db_queries_total",
+			Help: "Total number of database queries.",
+		},
+		[]string{"operation", "status"},
+	)
+
+	DBQueryErrorsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "db_query_errors_total",
+			Help: "Total number of database query errors.",
+		},
+		[]string{"operation", "error_type"},
+	)
 )
 
 func InitMetrics(registry *prometheus.Registry) {
@@ -113,4 +149,40 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(ThrottleWindowUsage)
 	registry.MustRegister(ThrottleWaitTime)
 	registry.MustRegister(ThrottleRedisErrors)
+	registry.MustRegister(DBPoolStats)
+	registry.MustRegister(DBQueryDuration)
+	registry.MustRegister(DBQueriesTotal)
+	registry.MustRegister(DBQueryErrorsTotal)
+}
+
+func UpdateDBPoolStats(db *sql.DB) {
+	stats := db.Stats()
+	DBPoolStats.WithLabelValues("max_open_connections").Set(float64(stats.MaxOpenConnections))
+	DBPoolStats.WithLabelValues("open_connections").Set(float64(stats.OpenConnections))
+	DBPoolStats.WithLabelValues("in_use").Set(float64(stats.InUse))
+	DBPoolStats.WithLabelValues("idle").Set(float64(stats.Idle))
+	DBPoolStats.WithLabelValues("wait_count").Set(float64(stats.WaitCount))
+	DBPoolStats.WithLabelValues("wait_duration_seconds").Set(stats.WaitDuration.Seconds())
+	DBPoolStats.WithLabelValues("max_idle_closed").Set(float64(stats.MaxIdleClosed))
+	DBPoolStats.WithLabelValues("max_lifetime_closed").Set(float64(stats.MaxLifetimeClosed))
+}
+
+func StartDBPoolMetricsCollector(db *sql.DB, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	go func() {
+		for range ticker.C {
+			UpdateDBPoolStats(db)
+		}
+	}()
+}
+
+func TrackQuery(operation string, start time.Time, err error) {
+	duration := time.Since(start).Seconds()
+	status := "success"
+	if err != nil {
+		status = "error"
+		DBQueryErrorsTotal.WithLabelValues(operation, "query_error").Inc()
+	}
+	DBQueryDuration.WithLabelValues(operation, status).Observe(duration)
+	DBQueriesTotal.WithLabelValues(operation, status).Inc()
 }
