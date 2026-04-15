@@ -82,8 +82,8 @@ docker compose up --build
 
 # Load test
 k6 run loadtest.js                                              # /no-throttle (default)
-k6 run loadtest.js -e URL=http://localhost:8080/throttle         # in-memory throttle
-k6 run loadtest.js -e URL=http://localhost:8080/redis           # redis throttle
+k6 run loadtest.js -e URL=http://localhost:8000/throttle         # in-memory throttle
+k6 run loadtest.js -e URL=http://localhost:8000/redis           # redis throttle
 
 # Monitor memory
 docker stats

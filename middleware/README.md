@@ -22,7 +22,7 @@ Request Masuk
     │ Ya                  │ Tidak
     ▼                     ▼
 ┌──────────┐    ┌─────────────────┐
-│ Proses   │    │ Queue penuh?   │
+│ Proses   │    │ Queue penuh?    │
 │ Request  │    │ MaxQueue >= ?   │
 └──────────┘    └───────┬─────────┘
                         │
@@ -101,6 +101,83 @@ middleware.Throttle(middleware.ThrottleConfig{
 
 Per-instance limit using `sync.Mutex` + slice.
 
+### Flow
+
+```
+Request Masuk
+     │
+     ▼
+┌─────────────────────────┐
+│  mu.Lock()              │
+│  now = UnixMilli()      │
+│  cleanup(now)           │
+│  Hapus times[] > 1 detik│
+└────────────┬────────────┘
+             │
+        ┌────▼─────────┐
+        │ len(times)   │
+        │ < 40 ?       │
+        └────┬─────────┘
+             │
+   ┌─────────┴──────────────┐
+   │ Ya                     │ Tidak
+   ▼                        ▼
+┌──────────────┐   ┌──────────────────┐
+│ times append │   │ len(queue) >= 80 │
+│ mu.Unlock()  │   │ ?                │
+│              │   └────────┬─────────┘
+│ Metric:      │            │
+│ • allowed    │   ┌────────┴──────────────┐
+│ • duration   │   │ Ya                    │ Tidak
+│ • window use │   ▼                       ▼
+└──────┬───────┘ ┌────────────┐   ┌──────────────────┐
+       │         │ 503        │   │ ch = make(chan)  │
+       ▼         │ Server     │   │ queue append(ch) │
+┌────────────┐   │ Busy       │   │ mu.Unlock()      │
+│ next(c) ✅ │   └────────────┘   │                  │
+└────────────┘                     │ Metric:          │
+                                   │ • queued         │
+                                   │ • queue length   │
+                                   │ • window usage   │
+                                   └────────┬─────────┘
+                                            │
+                                       ┌────▼─────┐
+                                       │ Ticker   │
+                                       │ 100ms    │
+                                       └────┬─────┘
+                                            │
+                                   ┌────────▼─────────┐
+                                   │ Context Done?    │
+                                   └────────┬─────────┘
+                                            │
+                              ┌─────────────┴──────────┐
+                              │ Ya                     │ Tidak
+                              ▼                        ▼
+                    ┌────────────────┐      ┌──────────────────────┐
+                    │ Hapus dari     │      │ Lock + Cleanup       │
+                    │ queue          │      │                      │
+                    │ Metric:timeout │      │ len(times) < 40 ?    │
+                    └───────┬────────┘      └──────────┬───────────┘
+                            │                      ┌───┴──────────┐
+                            ▼                      │ Ya           │ Tidak
+                    ┌────────────────┐             ▼              ▼
+                    │ 408            │    ┌──────────────┐  ┌──────────────┐
+                    │ Request        │    │ times append │  │ mu.Unlock()  │
+                    │ Timeout ⏱️     │    │ dequeue ch   │  │ wait lagi    │
+                    └────────────────┘    │ mu.Unlock()  │  └──────┬───────┘
+                                          │              │         │
+                                          │ Metric:      │    loop kembali
+                                          │ • queue len  │    ke ticker ▲
+                                          │ • wait time  │              │
+                                          │ • duration   │              │
+                                          └──────┬───────┘              │
+                                                 │                ┌────┘
+                                                 ▼                │
+                                          ┌────────────┐         │
+                                          │ next(c) ✅ │ ◄────────┘
+                                          └────────────┘
+```
+
 ### Components
 
 | Variable | Type | Function |
@@ -112,12 +189,18 @@ Per-instance limit using `sync.Mutex` + slice.
 ### Config
 
 ```go
-middleware.InMemoryThrottle(middleware.InMemoryThrottleConfig{
-    RateLimit:     10,
-    WindowSeconds: 5,
-    MaxQueue:      50,
+throttleInMem := middleware.InMemoryThrottle(middleware.InMemoryThrottleConfig{
+    RateLimit:     40,
+    WindowSeconds: 1,
+    MaxQueue:      80,
 })
 ```
+
+| Parameter | Nilai | Fungsi |
+|---|---|---|
+| `RateLimit` | 40 | Maksimal request dalam 1 window |
+| `WindowSeconds` | 1 | Durasi sliding window (detik) |
+| `MaxQueue` | 80 | Maksimal request dalam antrian |
 
 ## Comparison
 

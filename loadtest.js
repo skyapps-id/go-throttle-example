@@ -1,6 +1,7 @@
 import http from 'k6/http';
 import { sleep } from 'k6';
 import { Trend, Counter } from 'k6/metrics';
+import exec from 'k6/execution';
 
 const BASE_URL = __ENV.URL || 'http://localhost:8080/no-throttle';
 
@@ -11,11 +12,16 @@ const okCount = new Counter('ok_count');
 
 export const options = {
   scenarios: {
-    burst: {
-      executor: 'shared-iterations',
-      vus: 50,
-      iterations: 1000,
-      maxDuration: '10m',
+    ramping: {
+      executor: 'ramping-vus',
+      startVUs: 10,
+      stages: [
+        { duration: '5s', target: 30 },
+        { duration: '5s', target: 50 },
+        { duration: '5s', target: 70 },
+        { duration: '20s', target: 100 },
+        { duration: '5s', target: 50 },
+      ],
     },
   },
 };
@@ -77,7 +83,6 @@ export default function () {
     console.log(`[---] 408 TIMEOUT`);
   } else {
     console.log(`[---] ${res.status} - ${res.body}`);
+    exec.test.abort();
   }
-
-  sleep(Math.random() * 2 + 0.5);
 }

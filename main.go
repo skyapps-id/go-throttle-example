@@ -25,7 +25,7 @@ func main() {
 
 	pgDSN := os.Getenv("POSTGRES_DSN")
 	if pgDSN == "" {
-		pgDSN = "host=localhost user=root password=root dbname=rust-database port=5432 sslmode=disable"
+		pgDSN = "host=host.docker.internal user=root password=root dbname=database port=5432 sslmode=disable"
 	}
 
 	sqlDB, err := sql.Open("postgres", pgDSN)
@@ -57,9 +57,9 @@ func main() {
 	e.GET("/metrics", echo.WrapHandler(promhttp.HandlerFor(registry, promhttp.HandlerOpts{})))
 
 	throttleInMem := middleware.InMemoryThrottle(middleware.InMemoryThrottleConfig{
-		RateLimit:     10,
-		WindowSeconds: 5,
-		MaxQueue:      20,
+		RateLimit:     40,
+		WindowSeconds: 1,
+		MaxQueue:      80,
 	})
 
 	throttleRedis := middleware.Throttle(middleware.ThrottleConfig{
@@ -71,20 +71,31 @@ func main() {
 	})
 
 	e.GET("/no-throttle", func(c echo.Context) error {
-		data := make([]byte, 1*1024*1024)
-		time.Sleep(100 * time.Millisecond)
-		_ = data[0]
-		return c.JSON(200, map[string]string{
-			"message": "hello without throttle",
+		data := make([]byte, 1024*1024)
+		for i := range data {
+			data[i] = 1
+		}
+
+		time.Sleep(500 * time.Millisecond)
+		val := data[500000]
+
+		return c.JSON(200, map[string]interface{}{
+			"message":    "hello without throttle",
+			"bytes_held": val,
 		})
 	})
 
 	e.GET("/throttle", func(c echo.Context) error {
-		data := make([]byte, 1*1024*1024)
-		time.Sleep(100 * time.Millisecond)
-		_ = data[0]
-		return c.JSON(200, map[string]string{
-			"message": "hello from in-memory throttle",
+		data := make([]byte, 1024*1024)
+		for i := range data {
+			data[i] = 1
+		}
+		time.Sleep(500 * time.Millisecond)
+		val := data[500000]
+
+		return c.JSON(200, map[string]interface{}{
+			"message":    "hello from in-memory throttle",
+			"bytes_held": val,
 		})
 	}, throttleInMem)
 
